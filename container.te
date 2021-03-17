@@ -146,7 +146,11 @@ type container_plugin_var_run_t alias docker_plugin_var_run_t;
 files_pid_file(container_plugin_var_run_t)
 
 type container_unit_file_t alias docker_unit_file_t;
-systemd_unit_file(container_unit_file_t)
+ifdef(`distro_redhat',`
+	systemd_unit_file(container_unit_file_t)
+',`
+	init_unit_file(container_unit_file_t)
+')
 
 type container_devpts_t alias docker_devpts_t;
 term_pty(container_devpts_t)
@@ -225,8 +229,16 @@ allow container_runtime_domain container_file_t:dir_file_class_set mmap_file_per
 manage_files_pattern(container_runtime_domain, container_home_t, container_home_t)
 manage_dirs_pattern(container_runtime_domain, container_home_t, container_home_t)
 manage_lnk_files_pattern(container_runtime_domain, container_home_t, container_home_t)
-userdom_admin_home_dir_filetrans(container_runtime_domain, container_home_t, dir, ".container")
-userdom_manage_user_home_content(container_runtime_domain)
+ifdef(`distro_redhat',`
+	userdom_admin_home_dir_filetrans(container_runtime_domain, container_home_t, dir, ".container")
+	userdom_manage_user_home_content(container_runtime_domain)
+',`
+	userdom_manage_user_home_content_dirs(container_runtime_domain)
+	userdom_manage_user_home_content_files(container_runtime_domain)
+	userdom_manage_user_home_content_symlinks(container_runtime_domain)
+	userdom_manage_user_home_content_pipes(container_runtime_domain)
+	userdom_manage_user_home_content_sockets(container_runtime_domain)
+')
 
 manage_dirs_pattern(container_runtime_domain, container_config_t, container_config_t)
 manage_files_pattern(container_runtime_domain, container_config_t, container_config_t)
@@ -296,7 +308,11 @@ files_tmp_filetrans(container_runtime_domain, container_var_run_t, { dir file ln
 allow container_runtime_domain container_devpts_t:chr_file { relabelfrom rw_chr_file_perms setattr_chr_file_perms };
 term_create_pty(container_runtime_domain, container_devpts_t)
 term_use_all_ttys(container_runtime_domain)
-term_use_all_inherited_terms(container_runtime_domain)
+ifdef(`distro_redhat',`
+	term_use_all_inherited_terms(container_runtime_domain)
+',`
+	userdom_use_inherited_user_terminals(container_runtime_domain)
+')
 
 kernel_read_network_state(container_runtime_domain)
 kernel_read_all_sysctls(container_runtime_domain)
@@ -314,11 +330,23 @@ domain_use_interactive_fds(container_runtime_domain)
 domain_read_all_domains_state(container_runtime_domain)
 domain_getattr_all_domains(container_runtime_domain)
 
-userdom_map_tmp_files(container_runtime_domain)
+ifdef(`distro_redhat',`
+	userdom_map_tmp_files(container_runtime_domain)
+',`
+	userdom_map_user_tmp_files(container_runtime_domain)
+')
 
-optional_policy(`
-	gnome_map_generic_data_home_files(container_runtime_domain)
-	allow container_runtime_domain data_home_t:dir { relabelfrom relabelto };
+ifdef(`distro_redhat',`
+	optional_policy(`
+		gnome_map_generic_data_home_files(container_runtime_domain)
+		allow container_runtime_domain data_home_t:dir { relabelfrom relabelto };
+	')
+`,'
+	optional_policy(`
+		xdg_read_data_files(container_runtime_domain)
+		gnome_mmap_read_generic_gconf_home(container_runtime_domain)
+		allow container_runtime_domain xdg_data_t:dir { relabelfrom relabelto };
+	')
 ')
 
 gen_require(`
@@ -361,20 +389,33 @@ fs_read_cgroup_files(container_runtime_domain)
 fs_read_tmpfs_symlinks(container_runtime_domain)
 fs_search_all(container_runtime_domain)
 fs_getattr_all_fs(container_runtime_domain)
-fs_rw_onload_sockets(container_runtime_domain)
+ifdef(`distro_redhat',`
+	fs_rw_onload_sockets(container_runtime_domain)
+')
 
 auth_dontaudit_getattr_shadow(container_runtime_domain)
 
 init_read_state(container_runtime_domain)
-init_status(container_runtime_domain)
-init_stop(container_runtime_domain)
-init_start(container_runtime_domain)
-init_manage_config_transient_files(container_runtime_domain)
+ifdef(`distro_redhat',`
+	init_status(container_runtime_domain)
+	init_stop(container_runtime_domain)
+	init_start(container_runtime_domain)
+	init_manage_config_transient_files(container_runtime_domain)
+',`
+	init_get_system_status(container_runtime_domain)
+	init_service_status(container_runtime_domain)
+	init_stop_system(container_runtime_domain)
+	init_start_system(container_runtime_domain)
+')
 
 logging_send_audit_msgs(container_runtime_domain)
 
 miscfiles_read_localization(container_runtime_domain)
-miscfiles_dontaudit_access_check_cert(container_runtime_domain)
+ifdef(`distro_redhat',`
+	miscfiles_dontaudit_access_check_cert(container_runtime_domain)
+',`
+	miscfiles_dontaudit_access_check_certs(container_runtime_domain)
+')
 miscfiles_dontaudit_setattr_fonts_cache_dirs(container_runtime_domain)
 miscfiles_read_fonts(container_runtime_domain)
 miscfiles_read_hwdata(container_runtime_domain)
@@ -394,8 +435,10 @@ optional_policy(`
 	cron_system_entry(container_runtime_t, container_runtime_exec_t)
 ')
 
-optional_policy(`
-	ssh_use_ptys(container_runtime_domain)
+ifdef(`distro_redhat',`
+	optional_policy(`
+		ssh_use_ptys(container_runtime_domain)
+	')
 ')
 
 optional_policy(`
@@ -448,9 +491,15 @@ can_exec(container_runtime_domain, container_var_lib_t)
 kernel_dontaudit_setsched(container_runtime_domain)
 kernel_get_sysvipc_info(container_runtime_domain)
 kernel_request_load_module(container_runtime_domain)
-kernel_mounton_messages(container_runtime_domain)
-kernel_mounton_all_proc(container_runtime_domain)
-kernel_mounton_all_sysctls(container_runtime_domain)
+ifdef(`distro_redhat',`
+	kernel_mounton_messages(container_runtime_domain)
+	kernel_mounton_all_proc(container_runtime_domain)
+	kernel_mounton_all_sysctls(container_runtime_domain)
+',`
+	kernel_mounton_message_if(container_runtime_domain)
+	kernel_mounton_proc_dirs(container_runtime_domain)
+	kernel_mounton_sysctl_dirs(container_runtime_domain)
+')
 kernel_list_all_proc(container_runtime_domain)
 kernel_read_all_sysctls(container_runtime_domain)
 kernel_rw_net_sysctls(container_runtime_domain)
@@ -459,29 +508,47 @@ kernel_dontaudit_search_kernel_sysctl(container_runtime_domain)
 kernel_dontaudit_access_check_proc(container_runtime_domain)
 kernel_dontaudit_setattr_proc_files(container_runtime_domain)
 kernel_dontaudit_setattr_proc_dirs(container_runtime_domain)
-kernel_dontaudit_write_usermodehelper_state(container_runtime_domain)
+ifdef(`distro_redhat',`
+	kernel_dontaudit_write_usermodehelper_state(container_runtime_domain)
+')
 
 dev_setattr_null_dev(container_runtime_t)
-dev_getattr_all(container_runtime_domain)
-dev_getattr_sysfs_fs(container_runtime_domain)
+ifdef(`distro_redhat',`
+	dev_getattr_all(container_runtime_domain)
+	dev_getattr_sysfs_fs(container_runtime_domain)
+	dev_read_mtrr(container_runtime_domain)
+',`
+	dev_getattr_all_dev_nodes(container_runtime_domain)
+	dev_getattr_sysfs(container_runtime_domain)
+	dev_read_mtrr_dev(container_runtime_domain)
+')
 dev_read_rand(container_runtime_domain)
 dev_read_urand(container_runtime_domain)
 dev_read_lvm_control(container_runtime_domain)
 dev_rw_sysfs(container_runtime_domain)
 dev_rw_loop_control(container_runtime_domain)
 dev_rw_lvm_control(container_runtime_domain)
-dev_read_mtrr(container_runtime_domain)
 
-files_getattr_isid_type_dirs(container_runtime_domain)
-files_manage_isid_type_dirs(container_runtime_domain)
-files_manage_isid_type_files(container_runtime_domain)
-files_manage_isid_type_symlinks(container_runtime_domain)
-files_manage_isid_type_chr_files(container_runtime_domain)
-files_manage_isid_type_blk_files(container_runtime_domain)
-files_exec_isid_files(container_runtime_domain)
-files_mounton_isid(container_runtime_domain)
+ifdef(`distro_redhat',`
+	files_getattr_isid_type_dirs(container_runtime_domain)
+	files_manage_isid_type_dirs(container_runtime_domain)
+	files_manage_isid_type_files(container_runtime_domain)
+	files_manage_isid_type_symlinks(container_runtime_domain)
+	files_manage_isid_type_chr_files(container_runtime_domain)
+	files_manage_isid_type_blk_files(container_runtime_domain)
+	files_exec_isid_files(container_runtime_domain)
+	files_mounton_isid(container_runtime_domain)
+	files_mounton_isid_type_chr_file(container_runtime_domain)
+`,'
+	kernel_getattr_unlabeled_dirs(container_runtime_domain)
+	kernel_manage_unlabeled_dirs(container_runtime_domain)
+	kernel_manage_unlabeled_files(container_runtime_domain)
+	kernel_manage_unlabeled_symlinks(container_runtime_domain)
+	kernel_manage_unlabeled_chr_files(container_runtime_domain)
+	kernel_manage_unlabeled_blk_files(container_runtime_domain)
+	kernel_mounton_unlabeled_dirs(container_runtime_domain)
+')
 files_mounton_non_security(container_runtime_domain)
-files_mounton_isid_type_chr_file(container_runtime_domain)
 
 fs_mount_all_fs(container_runtime_domain)
 fs_unmount_all_fs(container_runtime_domain)
@@ -495,7 +562,11 @@ fs_relabelfrom_tmpfs(container_runtime_domain)
 fs_read_tmpfs_symlinks(container_runtime_domain)
 fs_getattr_all_fs(container_runtime_domain)
 fs_list_inotifyfs(container_runtime_domain)
-fs_rw_inherited_tmpfs_files(container_runtime_domain)
+ifdef(`distro_redhat',`
+	fs_rw_inherited_tmpfs_files(container_runtime_domain)
+',`
+	fs_rw_tmpfs_files(container_runtime_domain)
+')
 fs_read_tmpfs_symlinks(container_runtime_domain)
 fs_search_tmpfs(container_runtime_domain)
 fs_list_hugetlbfs(container_runtime_domain)
@@ -506,24 +577,41 @@ term_use_generic_ptys(container_runtime_domain)
 term_use_ptmx(container_runtime_domain)
 term_getattr_pty_fs(container_runtime_domain)
 term_relabel_pty_fs(container_runtime_domain)
-term_mounton_unallocated_ttys(container_runtime_domain)
+ifdef(`distro_redhat',`
+	term_mounton_unallocated_ttys(container_runtime_domain)
+')
 
-modutils_domtrans_kmod(container_runtime_domain)
+ifdef(`distro_redhat',`
+	modutils_domtrans_kmod(container_runtime_domain)
+',`
+	modutils_domtrans(container_runtime_domain)
+')
 
-systemd_status_all_unit_files(container_runtime_domain)
-systemd_start_systemd_services(container_runtime_domain)
+ifdef(`distro_redhat',`
+	systemd_status_all_unit_files(container_runtime_domain)
+	systemd_start_systemd_services(container_runtime_domain)
+',`
+	init_get_generic_units_status(container_runtime_domain)
+	init_start_generic_units(container_runtime_domain)
+')
 systemd_dbus_chat_logind(container_runtime_domain)
 systemd_dbus_chat_resolved(container_runtime_domain)
 
 userdom_stream_connect(container_runtime_domain)
 userdom_search_user_home_content(container_runtime_domain)
 userdom_read_all_users_state(container_runtime_domain)
-userdom_relabel_user_home_files(container_runtime_domain)
+ifdef(`distro_redhat',`
+	userdom_relabel_user_home_files(container_runtime_domain)
+',`
+	userdom_relabel_user_home_content_files(container_runtime_domain)
+')
 userdom_relabel_user_tmp_files(container_runtime_domain)
 userdom_relabel_user_tmp_dirs(container_runtime_domain)
 userdom_use_inherited_user_terminals(container_runtime_domain)
 userdom_use_user_ptys(container_runtime_domain)
-userdom_connectto_stream(container_runtime_domain)
+ifdef(`distro_redhat',`
+	userdom_connectto_stream(container_runtime_domain)
+')
 
 tunable_policy(`virt_use_nfs',`
 	fs_manage_nfs_dirs(container_runtime_domain)
@@ -596,7 +684,11 @@ optional_policy(`
     container_use_ptys(container_domain)
     container_spc_stream_connect(container_domain)
     fs_dontaudit_remount_tmpfs(container_domain)
-    dev_dontaudit_mounton_sysfs(container_domain)
+	ifdef(`distro_redhat',`
+		dev_dontaudit_mounton_sysfs(container_domain)
+	',`
+		dev_dontaudit_mounton_sysfs_dirs(container_domain)
+	')
     allow container_domain container_file_t:dir_file_class_set { relabelfrom relabelto map };
 ')
 
@@ -611,9 +703,17 @@ optional_policy(`
 
 optional_policy(`
 	dbus_system_bus_client(container_runtime_domain)
-	dbus_session_bus_client(container_runtime_domain)
+	ifdef(`distro_redhat',`
+		dbus_session_bus_client(container_runtime_domain)
+	',`
+		dbus_all_session_bus_client(container_runtime_domain)
+	')
 	init_dbus_chat(container_runtime_domain)
-	init_start_transient_unit(container_runtime_domain)
+	ifdef(`distro_redhat',`
+		init_start_transient_unit(container_runtime_domain)
+	',`
+		init_service_start(container_runtime_domain)
+	')
 
 	optional_policy(`
 		systemd_dbus_chat_logind(container_runtime_domain)
@@ -843,7 +943,9 @@ allow container_domain self:unix_dgram_socket create_socket_perms;
 allow container_domain self:unix_stream_socket create_stream_socket_perms;
 dontaudit container_domain self:capability2  block_suspend ;
 allow container_domain self:unix_stream_socket { sendto create_stream_socket_perms };
-fs_rw_onload_sockets(container_domain)
+ifdef(`distro_redhat',`
+	fs_rw_onload_sockets(container_domain)
+')
 fs_fusefs_entrypoint(container_domain)
 
 manage_files_pattern(container_domain, container_file_t, container_file_t)
@@ -864,8 +966,12 @@ container_exec_share_files(container_domain)
 container_use_ptys(container_domain)
 container_spc_stream_connect(container_domain)
 fs_dontaudit_remount_tmpfs(container_domain)
-dev_dontaudit_mounton_sysfs(container_domain)
-dev_dontaudit_mounton_sysfs(container_domain)
+ifdef(`distro_redhat',`
+	dev_dontaudit_mounton_sysfs(container_domain)
+	dev_dontaudit_mounton_sysfs(container_domain)
+',`
+	dev_dontaudit_mounton_sysfs_dirs(container_domain)
+')
 
 dontaudit container_domain container_runtime_tmpfs_t:dir read;
 allow container_domain container_runtime_tmpfs_t:dir mounton;
@@ -905,7 +1011,11 @@ kernel_get_sysvipc_info(container_domain)
 
 fs_getattr_all_fs(container_domain)
 fs_list_inotifyfs(container_domain)
-fs_rw_inherited_tmpfs_files(container_domain)
+ifdef(`distro_redhat',`
+	fs_rw_inherited_tmpfs_files(container_domain)
+',`
+	fs_rw_tmpfs_files(container_domain)
+')
 fs_read_tmpfs_symlinks(container_domain)
 fs_search_tmpfs(container_domain)
 fs_list_hugetlbfs(container_domain)
@@ -915,7 +1025,11 @@ fs_dontaudit_getattr_all_dirs(container_domain)
 fs_dontaudit_getattr_all_files(container_domain)
 fs_read_nsfs_files(container_domain)
 
-term_use_all_inherited_terms(container_domain)
+ifdef(`distro_redhat',`
+	term_use_all_inherited_terms(container_domain)
+',`
+	userdom_use_inherited_user_terminals(container_domain)
+')
 
 userdom_use_user_ptys(container_domain)
 userdom_rw_inherited_user_pipes(container_domain)
